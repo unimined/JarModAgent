@@ -25,17 +25,17 @@ public class JarModAgent {
     }
 
     public static void premain(String agentArgs, Instrumentation instrumentation) {
-        System.out.println("[Unimined.JarModAgent] Starting agent with args: " + agentArgs);
+        System.out.println("[JarModAgent] Starting agent with args: " + agentArgs);
         // process args
         ArgsReader argsReader = new ArgsReader(agentArgs);
         Map<String, String> args = argsReader.readAll();
-        System.out.println("[Unimined.JarModAgent] Agent args:");
+        System.out.println("[JarModAgent] Agent args:");
         for (Map.Entry<String, String> entry : args.entrySet()) {
-            System.out.println("[Unimined.JarModAgent]     " + entry.getKey() + " = " + entry.getValue());
+            System.out.println("[JarModAgent]     " + entry.getKey() + " = " + entry.getValue());
         }
         JarModAgent agent = new JarModAgent(instrumentation, args);
         agent.init();
-        System.out.println("[Unimined.JarModAgent] Agent started");
+        System.out.println("[JarModAgent] Agent started");
     }
 
     public JarModAgent(Instrumentation instrumentation, Map<String, String> args) {
@@ -68,14 +68,14 @@ public class JarModAgent {
 
 
     public void registerTransforms() throws IOException {
-        System.out.println("[Unimined.JarModAgent] Loading transforms...");
+        System.out.println("[JarModAgent] Loading transforms...");
         List<String> transformers = new ArrayList<>();
         for (String file : this.transformers) {
             try (InputStream is = JarModAgent.class.getClassLoader().getResourceAsStream(file)) {
                 if (is == null) {
                     throw new IOException("Could not find transform file: " + file);
                 }
-                System.out.println("[Unimined.JarModAgent] Loading transforms: " + file);
+                System.out.println("[JarModAgent] Loading transforms: " + file);
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -89,7 +89,7 @@ public class JarModAgent {
             try {
                 transformerManager.addTransformer(transformer);
             } catch (Exception e) {
-                System.out.println("[Unimined.JarModAgent] Failed to load transform: " + transformer);
+                System.out.println("[JarModAgent] Failed to load transform: " + transformer);
                 e.printStackTrace();
                 fail++;
             }
@@ -97,7 +97,7 @@ public class JarModAgent {
         if (fail > 0) {
             throw new RuntimeException("Failed to load " + fail + " transforms");
         }
-        System.out.println("[Unimined.JarModAgent] Loaded " + transformers.size() + " transforms from " + this.transformers.length + " files");
+        System.out.println("[JarModAgent] Loaded " + transformers.size() + " transforms from " + this.transformers.length + " files");
     }
 
     private byte[] readAllBytes(InputStream is) {
@@ -120,7 +120,7 @@ public class JarModAgent {
             public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
                 try (InputStream is = priorityClasspath.getResourceAsStream(className.replace(".", "/") + ".class")) {
                     if (is != null) {
-                        System.out.println("[Unimined.JarModAgent] Found class: \"" + className + "\" in priority classpath");
+                        System.out.println("[JarModAgent] Found class: \"" + className + "\" in priority classpath");
                         return readAllBytes(is);
                     }
                 } catch (IOException e) {
