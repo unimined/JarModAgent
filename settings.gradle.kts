@@ -1,1 +1,1 @@
-rootProject.name = "jarmodagent"
+rootProject.name = "jarmod-agent"
