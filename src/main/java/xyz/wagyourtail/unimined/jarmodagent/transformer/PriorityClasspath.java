@@ -1,4 +1,4 @@
-package xyz.wagyourtail.unimined.jarmodagent;
+package xyz.wagyourtail.unimined.jarmodagent.transformer;
 
 import net.lenni0451.classtransform.utils.tree.BasicClassProvider;
 import net.lenni0451.classtransform.utils.tree.IClassProvider;
@@ -29,25 +29,21 @@ public class PriorityClasspath extends URLClassLoader implements IClassProvider 
     }
 
     @Override
-    public Class<?> loadClass(String name) throws ClassNotFoundException {
-        throw new UnsupportedOperationException("Cannot load classes from the priority classpath directly.");
-    }
-
-    @Override
-    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        throw new UnsupportedOperationException("Cannot load classes from the priority classpath directly.");
-    }
-
-    @Override
     public byte[] getClass(String name) {
         try {
             InputStream is = getResourceAsStream(name.replace('.', '/') + ".class");
-            if (is == null)
+            if (is == null) {
                 return fallback.getClass(name);
-            return JarModAgent.readAllBytes(is);
+            }
+            return JarModder.readAllBytes(is);
         } catch (Exception e) {
             return fallback.getClass(name);
         }
+    }
+
+    @Override
+    public Map<String, Supplier<byte[]>> getAllClasses() {
+        return fallback.getAllClasses(); //TODO: implement
     }
 
     @Override
@@ -56,8 +52,13 @@ public class PriorityClasspath extends URLClassLoader implements IClassProvider 
     }
 
     @Override
-    public Map<String, Supplier<byte[]>> getAllClasses() {
-        return fallback.getAllClasses(); //TODO: implement
+    public Class<?> loadClass(String name) throws ClassNotFoundException {
+        throw new UnsupportedOperationException("Cannot load classes from the priority classpath directly.");
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        throw new UnsupportedOperationException("Cannot load classes from the priority classpath directly.");
     }
 
 }

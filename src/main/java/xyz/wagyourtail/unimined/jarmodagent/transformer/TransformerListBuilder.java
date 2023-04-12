@@ -1,4 +1,4 @@
-package xyz.wagyourtail.unimined.jarmodagent;
+package xyz.wagyourtail.unimined.jarmodagent.transformer;
 
 import net.lenni0451.classtransform.TransformerManager;
 import net.lenni0451.classtransform.utils.tree.IClassProvider;
@@ -21,7 +21,7 @@ public class TransformerListBuilder {
     }
 
     public void addTransformer(String transformer) throws IOException {
-        transformerUrls.addAll(JarModAgent.enumerationToList(priorityClasspath.getResources(transformer)));
+        transformerUrls.addAll(JarModder.enumerationToList(priorityClasspath.getResources(transformer)));
     }
 
     public Map<String, Map<String, List<String>>> build(TransformerManager transformerManager, IClassProvider classProvider) {
@@ -47,4 +47,5 @@ public class TransformerListBuilder {
         }
         return transformerMap;
     }
+
 }

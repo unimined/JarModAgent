@@ -1,6 +1,7 @@
 # JarModAgent
 
-java agent for bootstrapping jar mods, as well as coremodding with [ClassTransform](https://github.com/Lenni0451/ClassTransform) for runtime patches.
+java agent for bootstrapping jar mods, as well as coremodding
+with [ClassTransform](https://github.com/Lenni0451/ClassTransform) for runtime patches.
 
 ## TODO
 
