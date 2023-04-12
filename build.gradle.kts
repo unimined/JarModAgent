@@ -1,3 +1,5 @@
+import java.net.URI
+
 plugins {
     java
     `maven-publish`
@@ -39,5 +41,31 @@ tasks.jar {
         attributes(
             "Premain-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
         )
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "WagYourMaven"
+            url = if (project.hasProperty("version_snapshot")) {
+                URI.create("https://maven.wagyourtail.xyz/snapshots/")
+            } else {
+                URI.create("https://maven.wagyourtail.xyz/releases/")
+            }
+            credentials {
+                username = project.findProperty("mvn.user") as String? ?: System.getenv("USERNAME")
+                password = project.findProperty("mvn.key") as String? ?: System.getenv("TOKEN")
+            }
+        }
+    }
+    publications {
+        create<MavenPublication>("maven") {
+            groupId = project.group as String
+            artifactId = project.properties["archives_base_name"] as String? ?: project.name
+            version = project.version as String
+
+            from(components["java"])
+        }
     }
 }
