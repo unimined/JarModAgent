@@ -7,6 +7,6 @@ with [ClassTransform](https://github.com/Lenni0451/ClassTransform) for runtime p
 
 * support class transform better in unimined - add remapping support (maybe fork and do refmaps)
 
-* bootstrap jars from the mods folder
+~~* bootstrap jars from the mods folder~~
 
-* read transform list from manifest instead of launch arg
+~~* read transform list from manifest instead of launch arg~~
