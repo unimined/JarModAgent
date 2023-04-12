@@ -11,6 +11,7 @@ import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
+import java.nio.file.Files;
 import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.function.Function;
@@ -46,11 +47,17 @@ public class JarModder implements ClassFileTransformer {
         modsFolder = Optional.ofNullable(System.getProperty("jma.modsFolder")).map(File::new).orElse(null);
 
         transformerManager = new TransformerManager(priorityClasspath);
+        debug("Args: ");
+        debug("  Transformers: " + Arrays.toString(transformers));
+        debug("  Priority classpath: " + Arrays.toString(priorityClasspath.getURLs()));
+        debug("  Mods folder: " + modsFolder);
+
     }
 
     public void registerTransforms() throws IOException {
         TransformerListBuilder builder = new TransformerListBuilder(priorityClasspath);
         System.out.println("[JarModAgent] Registering transforms");
+        debug("Transformers: " + Arrays.toString(transformers));
         for (String transformer : transformers) {
             builder.addTransformer(transformer);
         }
@@ -59,6 +66,7 @@ public class JarModder implements ClassFileTransformer {
         }
         System.out.println("[JarModAgent] Building transform list");
         transformerList = builder.build(transformerManager, priorityClasspath);
+        debug("Transformer list: " + transformerList);
         System.out.println("[JarModAgent] Building transform list done");
     }
 
@@ -66,6 +74,7 @@ public class JarModder implements ClassFileTransformer {
         System.out.println("[JarModAgent] Bootstrapping mods folder");
         File[] files = modsFolder.listFiles();
         if (files == null) {
+            System.out.println("[JarModAgent] No files found in mods folder!");
             return;
         }
         int i = 0;
@@ -98,52 +107,96 @@ public class JarModder implements ClassFileTransformer {
         System.out.println("[JarModAgent] Bootstrapped " + i + " mods, with " + j + " transforms");
     }
 
+    public static String dot(String className) {
+        return className.replace('/', '.');
+    }
+
+    public byte[] onlyInPriority(String className, Map<String, URL> priorityUrls) throws IOException {
+        if (!priorityUrls.isEmpty()) {
+            // multiple in priority classpath
+            // TODO: handle this
+            debug("Found multiple classes: \"" + className + "\" in priority classpath");
+            for (Map.Entry<String, URL> entry : new HashSet<>(priorityUrls.entrySet())) {
+                if (hasRuntimePatch(className, entry.getValue())) {
+                    priorityUrls.remove(entry.getKey());
+                }
+            }
+            if (priorityUrls.size() > 1) {
+                // TODO: attempt to use asm stuff to merge patches
+                System.err.println(
+                    "Multiple versions of class: \"" + className +
+                        "\" in priority classpath; without runtime alternative transforms! this isn't currently allowed. if you" +
+                        " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
+                System.exit(1);
+                return null;
+            }
+            if (priorityUrls.size() == 0) {
+                System.err.println("Non-Patch version of class does not exist!");
+                System.exit(1);
+                return null;
+            }
+            return patch(className, (URL) priorityUrls.values().toArray()[0]);
+        }
+        debug("Found class: \"" + className + "\" in priority classpath");
+        // doesn't need any transform stuff as it's only once
+        return null;
+    }
+
+    public byte[] patch(String className, URL base, Map<String, URL> priorityUrls) throws IOException {
+        if (priorityUrls.size() > 1) {
+            // multiple in priority classpath
+            // check if we have runtime transforms registered from each location
+            for (Map.Entry<String, URL> entry : new HashSet<>(priorityUrls.entrySet())) {
+                if (hasRuntimePatch(className, entry.getValue())) {
+                    priorityUrls.remove(entry.getKey());
+                }
+            }
+            if (priorityUrls.size() > 0) {
+                // TODO: attempt to use asm stuff to merge patches
+                System.err.println(
+                    "Multiple versions of class: \"" + className +
+                        "\" in priority classpath; without runtime alternative transforms! this isn't currently allowed. if you" +
+                        " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
+                System.exit(1);
+                return null;
+            }
+            return patch(className, base);
+        } else if (priorityUrls.size() != 0) {
+            // once in priority classpath
+            debug("Found class: \"" + className + "\" in priority classpath");
+            debug(priorityUrls.values().toArray()[0].toString());
+            // doesn't need runtime transform stuff, so we can return the bytes from the priority classpath
+            return readAllBytes(base.openStream());
+        }
+
+        if (hasRuntimePatches(className)) {
+            debug("Found class with runtime patches: \"" + className + "\"");
+            return patch(className, base);
+        }
+        return null;
+
+    }
+
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
         try {
             Map<String, URL> urls = enumerationToList(loader.getResources(
-                className.replace(".", "/") + ".class")).stream().collect(
+                className + ".class")).stream().collect(
                 Collectors.toMap(URL::toString, Function.identity()));
             Map<String, URL> priorityUrls = enumerationToList(priorityClasspath.getResources(
-                className.replace(".", "/") + ".class")).stream().collect(
+                className + ".class")).stream().collect(
                 Collectors.toMap(URL::toString, Function.identity()));
             if (urls.size() > 1 || !priorityUrls.isEmpty()) {
-                debug("Found multiple classes: \"" + className +
+                debug("Found multiple classes: \"" + dot(className) +
                     "\" in classpath, or was in priority classpath; attempting patch");
             }
+            // remove priority urls from normal urls
             for (String url : priorityUrls.keySet()) {
                 urls.remove(url);
             }
             if (urls.isEmpty()) {
                 // only in priority classpath
-                if (priorityUrls.size() > 1) {
-                    // multiple in priority classpath
-                    // TODO: handle this
-                    debug("Found multiple classes: \"" + className + "\" in priority classpath");
-                    for (Map.Entry<String, URL> entry : new HashSet<>(priorityUrls.entrySet())) {
-                        if (hasRuntimePatch(className, entry.getValue())) {
-                            priorityUrls.remove(entry.getKey());
-                        }
-                    }
-                    if (priorityUrls.size() > 1) {
-                        // TODO: attempt to use asm stuff to merge patches
-                        System.err.println(
-                            "Multiple versions of class: \"" + className +
-                                "\" in priority classpath; without runtime alternative transforms! this isn't currently allowed. if you" +
-                                " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
-                        System.exit(1);
-                        return null;
-                    }
-                    if (priorityUrls.size() == 0) {
-                        System.err.println("Non-Patch version of class does not exist!");
-                        System.exit(1);
-                        return null;
-                    }
-                    return patch(className, (URL) priorityUrls.values().toArray()[0]);
-                }
-                debug("Found class: \"" + className + "\" in priority classpath");
-                // doesn't need any transform stuff as it's only once
-                return null;
+                return onlyInPriority(className, priorityUrls);
             }
             if (urls.size() > 1) {
                 // multiple in classpath
@@ -160,34 +213,12 @@ public class JarModder implements ClassFileTransformer {
                 System.exit(1);
                 return null;
             }
-            if (priorityUrls.size() > 1) {
-                // multiple in priority classpath
-                // check if we have runtime transforms registered from each location
-                for (Map.Entry<String, URL> entry : new HashSet<>(priorityUrls.entrySet())) {
-                    if (hasRuntimePatch(className, entry.getValue())) {
-                        priorityUrls.remove(entry.getKey());
-                    }
-                }
-                if (priorityUrls.size() > 0) {
-                    // TODO: attempt to use asm stuff to merge patches
-                    System.err.println(
-                        "Multiple versions of class: \"" + className +
-                            "\" in priority classpath; without runtime alternative transforms! this isn't currently allowed. if you" +
-                            " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
-                    System.exit(1);
-                    return null;
-                }
-                return patch(className, (URL) urls.values().toArray()[0]);
-            } else if (priorityUrls.size() != 0) {
-                // once in priority classpath
-                debug("Found class: \"" + className + "\" in priority classpath");
-                debug(priorityUrls.values().toArray()[0].toString());
-                // doesn't need runtime transform stuff, so we can return the bytes from the priority classpath
-                return readAllBytes(((URL) priorityUrls.values().toArray()[0]).openStream());
-            }
-            return null;
+            return patch(className, (URL) urls.values().toArray()[0], priorityUrls);
         } catch (IOException e) {
+            System.err.println("[JarModAgent] Failed to transform class: \"" + className + "\"" +
+                " with error:");
             e.printStackTrace();
+            System.exit(1);
             return null;
         }
     }
@@ -202,18 +233,48 @@ public class JarModder implements ClassFileTransformer {
 
     public boolean hasRuntimePatch(String className, URL location) {
         // get the jar part of the url
-        String jar = location.toString().split("!")[0];
-        // find class transform lists
-        for (String key : transformerList.get(className).keySet()) {
-            if (key.equals(jar)) {
-                return true;
+        String loc = location.toString();
+        if (loc.contains("!")) {
+            loc = loc.split("!")[0];
+            // find class transform lists
+            for (String key : transformerList.get(dot(className)).keySet()) {
+                debug("Checking key: \"" + key + "\" against location: \"" + loc + "\"" +
+                    " for class: \"" + className + "\"");
+                if (key.equals(loc)) {
+                    return true;
+                }
+            }
+        } else {
+            // folder classpath, these just get merged
+            for (String key : transformerList.get(dot(className)).keySet()) {
+                debug("Checking key: \"" + key + "\" for class: \"" + className + "\"");
+                if (!key.contains("!")) {
+                    return true;
+                }
             }
         }
+        debug("No runtime patches for class: \"" + className + "\"");
         return false;
     }
 
+    public boolean hasRuntimePatches(String className) {
+        return transformerList.containsKey(dot(className));
+    }
+
     public byte[] patch(String className, URL base) throws IOException {
-        return transformerManager.transform(className, readAllBytes(base.openStream()));
+        return patch(dot(className), readAllBytes(base.openStream()));
+    }
+
+    public byte[] patch(String className, byte[] base) throws IOException {
+        debug("Patching class: \"" + className + "\"");
+        byte[] out = transformerManager.transform(dot(className), base);
+        if (JarModAgent.DEBUG) {
+            // write out patched class
+            File file = new File(".jma/patched/" + className + ".class");
+            file.getParentFile().mkdirs();
+            Files.write(file.toPath(), out);
+        }
+        return out;
     }
 
     public static byte[] readAllBytes(InputStream is) {
@@ -230,7 +291,7 @@ public class JarModder implements ClassFileTransformer {
         return output.toByteArray();
     }
 
-    public void debug(String msg) {
+    public static void debug(String msg) {
         if (JarModAgent.DEBUG) {
             System.out.println("[JarModAgent] " + msg);
         }

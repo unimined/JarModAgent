@@ -21,7 +21,9 @@ public class TransformerListBuilder {
     }
 
     public void addTransformer(String transformer) throws IOException {
-        transformerUrls.addAll(JarModder.enumerationToList(priorityClasspath.getResources(transformer)));
+        List<URL> urls = JarModder.enumerationToList(priorityClasspath.getResources(transformer));
+        transformerUrls.addAll(urls);
+        JarModder.debug("Found " + transformerUrls.size() + " transformers at " + transformer);
     }
 
     public Map<String, Map<String, List<String>>> build(TransformerManager transformerManager, IClassProvider classProvider) {
@@ -35,6 +37,7 @@ public class TransformerListBuilder {
                     ClassReader classReader = new ClassReader(classProvider.getClass(line));
                     classReader.accept(classNode, 0);
                     Set<String> targets = transformerManager.addTransformer(classNode, true);
+                    JarModder.debug("Transformer " + line + " targets " + targets);
                     for (String target : targets) {
                         transformerMap.computeIfAbsent(target, s -> new HashMap<>())
                             .computeIfAbsent(patchSource, s -> new ArrayList<>())
@@ -42,7 +45,9 @@ public class TransformerListBuilder {
                     }
                 }
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                e.printStackTrace();
+                System.err.println("Failed to load transformer: " + url);
+                System.exit(1);
             }
         }
         return transformerMap;
