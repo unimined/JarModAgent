@@ -10,12 +10,34 @@ import java.util.jar.JarFile;
 public class JarModAgent {
     public static final boolean DEBUG = Boolean.getBoolean("jma.debug");
 
+    public static final String VERSION = JarModAgent.class.getPackage().getImplementationVersion();
+
+    /**
+     * File.pathSeparator separated list of transformers to load. these are files containing
+     * a list of classes for ClassTransform to load, separated by newlines.
+     */
+    public static final String TRANSFORMERS = "jma.transformers";
+
+
+    /**
+     * File.pathSeparator separated list of files that make up the "priority classpath".
+     * this is the classpath that will be searched first for classes. and takes priority over classes
+     * with the same name that aren't on this list
+     */
+    public static final String PRIORITY_CLASSPATH = "jma.priorityClasspath";
+
+    /**
+     * Folder location to automatically search and append all files in it to the priority classpath.
+     */
+    public static final String MODS_FOLDER = "jma.modsFolder";
+
     public static void agentmain(String agentArgs, Instrumentation inst) throws IOException, ClassNotFoundException {
         premain(agentArgs, inst);
     }
 
     public static void premain(String agentArgs, Instrumentation instrumentation) throws IOException, ClassNotFoundException {
         System.out.println("[JarModAgent] Starting agent");
+        System.out.println("[JarModAgent] Version: " + VERSION);
         JarModder jarModder = new JarModder(instrumentation);
         jarModder.registerTransforms();
         instrumentation.addTransformer(jarModder);

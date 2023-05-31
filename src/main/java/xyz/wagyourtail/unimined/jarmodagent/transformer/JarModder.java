@@ -31,10 +31,10 @@ public class JarModder implements ClassFileTransformer {
     public JarModder(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
 
-        transformers = Optional.ofNullable(System.getProperty("jma.transformers"))
+        transformers = Optional.ofNullable(System.getProperty(JarModAgent.TRANSFORMERS))
             .map(it -> it.split(File.pathSeparator))
             .orElse(new String[0]);
-        priorityClasspath = new PriorityClasspath(Optional.ofNullable(System.getProperty("jma.priorityClasspath"))
+        priorityClasspath = new PriorityClasspath(Optional.ofNullable(System.getProperty(JarModAgent.PRIORITY_CLASSPATH))
             .map(it -> Arrays.stream(
                 it.split(File.pathSeparator)).map(e -> {
                 try {
@@ -44,7 +44,7 @@ public class JarModder implements ClassFileTransformer {
                 }
             }).toArray(URL[]::new))
             .orElse(new URL[0]));
-        modsFolder = Optional.ofNullable(System.getProperty("jma.modsFolder")).map(File::new).orElse(null);
+        modsFolder = Optional.ofNullable(System.getProperty(JarModAgent.MODS_FOLDER)).map(File::new).orElse(null);
 
         transformerManager = new TransformerManager(priorityClasspath);
         debug("Args: ");
