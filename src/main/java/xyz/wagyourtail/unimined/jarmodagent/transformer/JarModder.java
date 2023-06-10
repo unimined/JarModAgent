@@ -17,6 +17,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 
@@ -115,8 +116,11 @@ public class JarModder implements ClassFileTransformer {
 
     public byte[] onlyInPriority(String className, Map<String, URL> priorityUrls) throws IOException {
         if (!priorityUrls.isEmpty()) {
+            //single in priority classpath
+            if (priorityUrls.size() == 1) {
+                return readAllBytes(((URL) priorityUrls.values().toArray()[0]).openStream());
+            }
             // multiple in priority classpath
-            // TODO: handle this
             debug("Found multiple classes: \"" + className + "\" in priority classpath");
             for (Map.Entry<String, URL> entry : new HashSet<>(priorityUrls.entrySet())) {
                 if (hasRuntimePatch(className, entry.getValue())) {
@@ -144,7 +148,7 @@ public class JarModder implements ClassFileTransformer {
         return null;
     }
 
-    public byte[] patch(String className, URL base, Map<String, URL> priorityUrls) throws IOException {
+    public byte[] patch(String className, Supplier<URL> base, Map<String, URL> priorityUrls) throws IOException {
         if (priorityUrls.size() > 1) {
             // multiple in priority classpath
             // check if we have runtime transforms registered from each location
@@ -153,7 +157,7 @@ public class JarModder implements ClassFileTransformer {
                     priorityUrls.remove(entry.getKey());
                 }
             }
-            if (priorityUrls.size() > 0) {
+            if (priorityUrls.size() > 1) {
                 // TODO: attempt to use asm stuff to merge patches
                 System.err.println(
                     "Multiple versions of class: \"" + className +
@@ -161,8 +165,11 @@ public class JarModder implements ClassFileTransformer {
                         " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
                 System.exit(1);
                 return null;
+            } else if (priorityUrls.size() == 0) {
+                return patch(className, base.get());
+            } else {
+                return patch(className, (URL) priorityUrls.values().toArray()[0]);
             }
-            return patch(className, base);
         } else if (priorityUrls.size() != 0) {
             // once in priority classpath
             debug("Found class override: \"" + className + "\" in priority classpath");
@@ -173,7 +180,7 @@ public class JarModder implements ClassFileTransformer {
 
         if (hasRuntimePatches(className)) {
             debug("Found class with runtime patches: \"" + className + "\"");
-            return patch(className, base);
+            return patch(className, base.get());
         }
         return null;
 
@@ -214,9 +221,9 @@ public class JarModder implements ClassFileTransformer {
             Map<String, URL> priorityUrls = enumerationToList(priorityClasspath.getResources(
                 className + ".class")).stream().collect(
                 Collectors.toMap(URL::toString, Function.identity()));
-            if (urls.size() > 1 || !priorityUrls.isEmpty()) {
+            if (urls.size() > 1) {
                 debug("Found multiple classes: \"" + dot(className) +
-                    "\" in classpath, or was in priority classpath; attempting patch");
+                    "\" in classpath, attempting patch");
             }
             // remove priority urls from normal urls
             for (String url : priorityUrls.keySet()) {
@@ -226,27 +233,30 @@ public class JarModder implements ClassFileTransformer {
                 // only in priority classpath
                 return onlyInPriority(className, priorityUrls);
             }
-            if (urls.size() > 1) {
-                // multiple in classpath
-                // detect if all the same
-                if (urls.values().stream().map(this::calculateHash).collect(Collectors.toSet()).size() == 1) {
-                    return patch(className, (URL) urls.values().toArray()[0], priorityUrls);
+            return patch(className, () -> {
+                if (urls.size() > 1) {
+                    // multiple in classpath
+                    // detect if all the same
+                    Set<String> hashes = urls.values().stream().map(this::calculateHash).collect(Collectors.toSet());
+                    if (hashes.size() == 1) {
+                        return (URL) urls.values().toArray()[0];
+                    }
+                    // else
+                    System.err.println(
+                            "Multiple versions of class: \"" + className +
+                                    "\" in non-priority classpath; this isn't expected or allowed");
+                    for (URL url : urls.values()) {
+                        System.err.println(" - " + url + " - "+ calculateHash(url));
+                    }
+                    debug("priority classpath:");
+                    for (URL url : priorityUrls.values()) {
+                        debug(" - " + url);
+                    }
+                    System.exit(1);
+                    return null;
                 }
-                // else
-                System.err.println(
-                    "Multiple versions of class: \"" + className +
-                        "\" in non-priority classpath; this isn't expected or allowed");
-                for (URL url : urls.values()) {
-                    System.err.println(" - " + url);
-                }
-                debug("priority classpath:");
-                for (URL url : priorityUrls.values()) {
-                    debug(" - " + url);
-                }
-                System.exit(1);
-                return null;
-            }
-            return patch(className, (URL) urls.values().toArray()[0], priorityUrls);
+                return (URL) urls.values().toArray()[0];
+            }, priorityUrls);
         } catch (IOException e) {
             System.err.println("[JarModAgent] Failed to transform class: \"" + className + "\"" +
                 " with error:");
