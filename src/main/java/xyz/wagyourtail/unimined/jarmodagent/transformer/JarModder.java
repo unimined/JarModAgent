@@ -12,6 +12,8 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.function.Function;
@@ -177,6 +179,32 @@ public class JarModder implements ClassFileTransformer {
 
     }
 
+    private String bytesToHex(byte[] hash) {
+        StringBuilder hexString = new StringBuilder(2 * hash.length);
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
+
+    private String calculateHash(URL url) {
+        try (InputStream stream = url.openStream()) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = stream.read(buffer)) > 0) {
+                digest.update(buffer, 0, read);
+            }
+            return bytesToHex(digest.digest());
+        } catch (IOException | NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
         try {
@@ -200,6 +228,11 @@ public class JarModder implements ClassFileTransformer {
             }
             if (urls.size() > 1) {
                 // multiple in classpath
+                // detect if all the same
+                if (urls.values().stream().map(this::calculateHash).collect(Collectors.toSet()).size() == 1) {
+                    return patch(className, (URL) urls.values().toArray()[0], priorityUrls);
+                }
+                // else
                 System.err.println(
                     "Multiple versions of class: \"" + className +
                         "\" in non-priority classpath; this isn't expected or allowed");
