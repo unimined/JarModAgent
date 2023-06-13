@@ -45,6 +45,10 @@ tasks.jar {
     }
 }
 
+tasks.shadowJar {
+    relocate("org.objectweb", "xyz.wagyourtail.unimined.jarmodagent.shadow.org.objectweb")
+}
+
 publishing {
     repositories {
         maven {
