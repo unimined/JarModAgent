@@ -70,7 +70,10 @@ publishing {
             artifactId = project.properties["archives_base_name"] as String? ?: project.name
             version = project.version as String
 
-            from(components["java"])
+            artifact(tasks["jar"]) {}
+            artifact(tasks["shadowJar"]) {
+                classifier = "all"
+            }
         }
     }
 }
