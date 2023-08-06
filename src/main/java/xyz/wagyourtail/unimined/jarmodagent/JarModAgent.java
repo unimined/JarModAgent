@@ -2,10 +2,22 @@ package xyz.wagyourtail.unimined.jarmodagent;
 
 import xyz.wagyourtail.unimined.jarmodagent.transformer.JarModder;
 
+import java.io.File;
 import java.io.IOException;
+import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Objects;
+import java.util.Set;
 import java.util.jar.JarFile;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipOutputStream;
 
 public class JarModAgent {
     public static final boolean DEBUG = Boolean.getBoolean("jma.debug");
@@ -31,6 +43,17 @@ public class JarModAgent {
      */
     public static final String MODS_FOLDER = "jma.modsFolder";
 
+    /**
+     * Disable the mods folder. this will prevent the mods folder from being searched and appended to the priority classpath.
+     */
+    public static final String DISABLE_MODS_FOLDER = "jma.disableModsFolder";
+
+    /**
+     * Load the mods folder to the system classloader. this will load all classes in the mods folder to the system classloader
+     * this should be set to false if another thing is loading the mods folder to a classloader
+     */
+    public static final String DISABLE_INSERT_INTO_SYSTEM_CL = "jma.disableInsertIntoSystemCL";
+
     public static void agentmain(String agentArgs, Instrumentation inst) throws IOException, ClassNotFoundException {
         premain(agentArgs, inst);
     }
@@ -39,7 +62,7 @@ public class JarModAgent {
         System.out.println("[JarModAgent] Starting agent");
         System.out.println("[JarModAgent] Version: " + VERSION);
         JarModder jarModder = new JarModder(instrumentation);
-        jarModder.registerTransforms();
+        jarModder.registerTransforms(new File[0]);
         instrumentation.addTransformer(jarModder);
         System.out.println("[JarModAgent] Agent started");
 
@@ -63,6 +86,59 @@ public class JarModAgent {
                 System.err.println("[JarModAgent] Failed to chain agent " + chain);
                 e.printStackTrace();
             }
+        }
+    }
+
+    /**
+     * this endpoint is for statically transforming the jar file.
+     * this is used for the gradle plugin, so I don't have to include lenni/classtransform in unimined.
+     * args:
+     * 0: path to input jar
+     * 1: classpath, File.pathSeparator separated
+     * 2: output jar path
+     * @param args
+     */
+    public static void main(String[] args) throws IOException, IllegalClassFormatException {
+        System.setProperty(DISABLE_MODS_FOLDER, "true");
+        System.setProperty(DISABLE_INSERT_INTO_SYSTEM_CL, "true");
+        JarModder jarModder = new JarModder(null);
+        jarModder.registerTransforms(new File[] {
+            new File(args[0])
+        });
+        String[] classpath = args[1].split(File.pathSeparator);
+        URL[] urls = new URL[classpath.length + 1];
+        for (int i = 0; i < classpath.length; i++) {
+            urls[i] = new File(classpath[i]).toURI().toURL();
+        }
+        urls[urls.length - 1] = new File(args[0]).toURI().toURL();
+        URLClassLoader loader = new URLClassLoader(urls, null);
+        Set<String> targets = jarModder.getTargetClasses();
+        try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(Paths.get(args[2]), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))) {
+            try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(Paths.get(args[0])))) {
+                ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    zos.putNextEntry(entry);
+                    if (entry.isDirectory()) {
+                        zos.closeEntry();
+                        continue;
+                    }
+                    // in case transforms itself :concern:
+                    if (entry.getName().endsWith(".class")) {
+                        String className = entry.getName().substring(0, entry.getName().length() - 6);
+                        if (targets.contains(JarModder.dot(className))) continue;
+                    }
+                    zos.write(JarModder.readAllBytes(zis));
+                    zos.closeEntry();
+                }
+            }
+            for (String targetClass : targets) {
+                zos.putNextEntry(new ZipEntry(targetClass.replace('.', '/') + ".class"));
+                zos.write(jarModder.transform(loader, targetClass.replace('.', '/'), null, null, JarModder.readAllBytes(Objects.requireNonNull(loader.getResourceAsStream(targetClass.replace('.', '/') + ".class")))));
+                zos.closeEntry();
+            }
+        } catch (Exception e) {
+            Files.delete(Paths.get(args[2]));
+            throw e;
         }
     }
 

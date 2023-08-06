@@ -40,6 +40,7 @@ tasks.jar {
     manifest {
         attributes(
             "Premain-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
+            "Main-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
             "Implementation-Version" to project.version,
         )
     }

@@ -26,6 +26,7 @@ public class TransformerListBuilder {
         JarModder.debug("Found " + transformerUrls.size() + " transformers at " + transformer);
     }
 
+    // { [targetClass] -> { [transformListUri] -> transform[] }
     public Map<String, Map<String, List<String>>> build(TransformerManager transformerManager, IClassProvider classProvider) {
         Map<String, Map<String, List<String>>> transformerMap = new HashMap<>();
         for (URL url : transformerUrls) {

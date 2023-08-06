@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class JarModder implements ClassFileTransformer {
 
     private final String[] transformers;
-    private final PriorityClasspath priorityClasspath;
+    private final ClassProviderWithFallback classProvider;
     private final Instrumentation instrumentation;
     private final File modsFolder;
     private final TransformerManager transformerManager;
@@ -37,7 +37,7 @@ public class JarModder implements ClassFileTransformer {
         transformers = Optional.ofNullable(System.getProperty(JarModAgent.TRANSFORMERS))
             .map(it -> it.split(File.pathSeparator))
             .orElse(new String[0]);
-        priorityClasspath = new PriorityClasspath(Optional.ofNullable(System.getProperty(JarModAgent.PRIORITY_CLASSPATH))
+        classProvider = new ClassProviderWithFallback(new PriorityClasspath(Optional.ofNullable(System.getProperty(JarModAgent.PRIORITY_CLASSPATH))
             .map(it -> Arrays.stream(
                 it.split(File.pathSeparator)).map(e -> {
                 try {
@@ -46,34 +46,41 @@ public class JarModder implements ClassFileTransformer {
                     throw new RuntimeException(ex);
                 }
             }).toArray(URL[]::new))
-            .orElse(new URL[0]));
-        modsFolder = Optional.ofNullable(System.getProperty(JarModAgent.MODS_FOLDER)).map(File::new).orElse(null);
+            .orElse(new URL[0])), null);
 
-        transformerManager = new TransformerManager(priorityClasspath);
+        if (!Boolean.getBoolean(JarModAgent.DISABLE_MODS_FOLDER)) {
+            modsFolder = Optional.ofNullable(System.getProperty(JarModAgent.MODS_FOLDER)).map(File::new).orElse(new File("mods"));
+        } else {
+            modsFolder = null;
+        }
+
+        transformerManager = new TransformerManager(classProvider);
         debug("Args: ");
         debug("  Transformers: " + Arrays.toString(transformers));
-        debug("  Priority classpath: " + Arrays.toString(priorityClasspath.getURLs()));
+        debug("  Priority classpath: " + Arrays.toString(classProvider.priorityClasspath.getURLs()));
         debug("  Mods folder: " + modsFolder);
 
     }
 
-    public void registerTransforms() throws IOException {
-        TransformerListBuilder builder = new TransformerListBuilder(priorityClasspath);
+    public void registerTransforms(File[] extra) throws IOException {
+        TransformerListBuilder builder = new TransformerListBuilder(classProvider.priorityClasspath);
         System.out.println("[JarModAgent] Registering transforms");
         debug("Transformers: " + Arrays.toString(transformers));
+        if (modsFolder != null)
+            boostrapModsFolder(builder);
+        for (File file : extra) {
+            boostrapModJar(file, builder);
+        }
         for (String transformer : transformers) {
             builder.addTransformer(transformer);
         }
-        if (modsFolder != null) {
-            boostrapModsFolder();
-        }
         System.out.println("[JarModAgent] Building transform list");
-        transformerList = builder.build(transformerManager, priorityClasspath);
+        transformerList = builder.build(transformerManager, classProvider);
         debug("Transformer list: " + transformerList);
-        System.out.println("[JarModAgent] Building transform list done");
+        System.out.println("[JarModAgent] Building transform list done, " + transformerList.size() + " classes targeted");
     }
 
-    public void boostrapModsFolder() {
+    private void boostrapModsFolder(TransformerListBuilder builder) {
         System.out.println("[JarModAgent] Bootstrapping mods folder");
         File[] files = modsFolder.listFiles();
         if (files == null) {
@@ -85,29 +92,36 @@ public class JarModder implements ClassFileTransformer {
         for (File file : files) {
             if (file.isFile()) {
                 try {
-                    file = file.getCanonicalFile();
-                    JarFile jf = new JarFile(file);
-                    System.out.println("[JarModAgent] Bootstrapping " + file.getName());
-                    priorityClasspath.addURL(file.toURI().toURL());
-                    //TODO: maybe not to bootstrap classloader?
-                    instrumentation.appendToSystemClassLoaderSearch(jf);
-                    // get transforms from manifest
-                    String transforms = jf.getManifest().getMainAttributes().getValue("JarModAgent-Transforms");
-                    if (transforms != null) {
-                        for (String transformer : transforms.split(",")) {
-                            transformerManager.addTransformer(transformer);
-                            j++;
-                        }
-                    }
+                    j += boostrapModJar(file, builder);
                     i++;
                 } catch (IOException e) {
                     System.out.println("[JarModAgent] Failed to bootstrap " + file.getName());
                     System.out.println("[JarModAgent] " + e.getMessage());
-                    continue;
                 }
             }
         }
         System.out.println("[JarModAgent] Bootstrapped " + i + " mods, with " + j + " transforms");
+    }
+
+    private int boostrapModJar(File file, TransformerListBuilder builder) throws IOException {
+        int j = 0;
+        file = file.getCanonicalFile();
+        JarFile jf = new JarFile(file);
+        System.out.println("[JarModAgent] Bootstrapping " + file.getName());
+        classProvider.priorityClasspath.addURL(file.toURI().toURL());
+        //TODO: maybe not to bootstrap classloader?
+        if (!Boolean.getBoolean(JarModAgent.DISABLE_INSERT_INTO_SYSTEM_CL)) {
+            instrumentation.appendToSystemClassLoaderSearch(jf);
+        }
+        // get transforms from manifest
+        String transforms = jf.getManifest().getMainAttributes().getValue("JarModAgent-Transforms");
+        if (transforms != null) {
+            for (String transformer : transforms.split(",")) {
+                builder.addTransformer(transformer);
+                j++;
+            }
+        }
+        return j;
     }
 
     public static String dot(String className) {
@@ -215,10 +229,11 @@ public class JarModder implements ClassFileTransformer {
     @Override
     public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
         try {
+            classProvider.setFallback(loader);
             Map<String, URL> urls = enumerationToList(loader.getResources(
                 className + ".class")).stream().collect(
                 Collectors.toMap(URL::toString, Function.identity()));
-            Map<String, URL> priorityUrls = enumerationToList(priorityClasspath.getResources(
+            Map<String, URL> priorityUrls = enumerationToList(classProvider.priorityClasspath.getResources(
                 className + ".class")).stream().collect(
                 Collectors.toMap(URL::toString, Function.identity()));
             if (urls.size() > 1) {
@@ -318,6 +333,11 @@ public class JarModder implements ClassFileTransformer {
             Files.write(file.toPath(), out);
         }
         return out;
+    }
+
+
+    public Set<String> getTargetClasses() {
+        return transformerList.keySet();
     }
 
     public static byte[] readAllBytes(InputStream is) {
