@@ -111,7 +111,7 @@ public class JarModAgent {
             urls[i] = new File(classpath[i]).toURI().toURL();
         }
         urls[urls.length - 1] = new File(args[0]).toURI().toURL();
-        URLClassLoader loader = new URLClassLoader(urls, null);
+        URLClassLoader loader = new URLClassLoader(urls, JarModAgent.class.getClassLoader());
         Set<String> targets = jarModder.getTargetClasses();
         try (ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(Paths.get(args[2]), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))) {
             try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(Paths.get(args[0])))) {
@@ -136,6 +136,10 @@ public class JarModAgent {
                 zos.write(jarModder.transform(loader, targetClass.replace('.', '/'), null, null, JarModder.readAllBytes(Objects.requireNonNull(loader.getResourceAsStream(targetClass.replace('.', '/') + ".class")))));
                 zos.closeEntry();
             }
+            // write net/lenni0451/classtransform/InjectionCallback to jar
+            zos.putNextEntry(new ZipEntry("net/lenni0451/classtransform/InjectionCallback.class"));
+            zos.write(JarModder.readAllBytes(Objects.requireNonNull(loader.getResourceAsStream("net/lenni0451/classtransform/InjectionCallback.class"))));
+            zos.closeEntry();
         } catch (Exception e) {
             Files.delete(Paths.get(args[2]));
             throw e;
