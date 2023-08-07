@@ -4,7 +4,6 @@ import xyz.wagyourtail.unimined.jarmodagent.transformer.JarModder;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
 import java.net.URL;
@@ -35,6 +34,12 @@ public class JarModAgent {
     public static final String JMA_TRANSFORMS_PROPERTY = "JarModAgent-Transforms";
 
     /**
+     * property for META-INF/MANIFEST.MF to specify any {@link xyz.wagyourtail.unimined.jarmodagent.transformer.JMAInitializer}'s to load.
+     * @since 0.1.4
+     */
+    public static final String JMA_INITIALIZERS_PROPERTY = "JarModAgent-Initializers";
+
+    /**
      * File.pathSeparator separated list of transformers to load. these are files containing
      * a list of classes for ClassTransform to load, separated by newlines.
      */
@@ -45,6 +50,12 @@ public class JarModAgent {
      * @since 0.1.3
      */
     public static final String REFMAPS = "jma.refmaps";
+
+    /**
+     * File.pathSeparator separated list of {@link xyz.wagyourtail.unimined.jarmodagent.transformer.JMAInitializer}'s to load.
+     * @since 0.1.4
+     */
+    public static final String INITIALIZERS = "jma.initializers";
 
     /**
      * File.pathSeparator separated list of files that make up the "priority classpath".
@@ -81,7 +92,7 @@ public class JarModAgent {
         premain(agentArgs, inst);
     }
 
-    public static void premain(String agentArgs, Instrumentation instrumentation) throws IOException, ClassNotFoundException {
+    public static void premain(String agentArgs, Instrumentation instrumentation) throws IOException {
         System.out.println("[JarModAgent] Starting agent");
         System.out.println("[JarModAgent] Version: " + VERSION);
         JarModder jarModder = new JarModder(instrumentation);
@@ -121,7 +132,7 @@ public class JarModAgent {
      * 2: output jar path
      * @param args
      */
-    public static void main(String[] args) throws IOException, IllegalClassFormatException {
+    public static void main(String[] args) throws IOException {
         System.setProperty(DISABLE_MODS_FOLDER, "true");
         System.setProperty(DISABLE_INSERT_INTO_SYSTEM_CL, "true");
         JarModder jarModder = new JarModder(null);

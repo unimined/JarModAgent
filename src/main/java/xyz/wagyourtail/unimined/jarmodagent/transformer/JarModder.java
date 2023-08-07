@@ -1,6 +1,5 @@
 package xyz.wagyourtail.unimined.jarmodagent.transformer;
 
-import net.lenni0451.classtransform.TransformerManager;
 import xyz.wagyourtail.unimined.jarmodagent.JarModAgent;
 
 import java.io.ByteArrayOutputStream;
@@ -8,7 +7,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.instrument.ClassFileTransformer;
-import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
 import java.nio.file.Files;
@@ -24,14 +22,15 @@ import java.util.stream.Collectors;
 
 public class JarModder implements ClassFileTransformer {
 
-    private final String[] transformers;
-    private final String[] refmaps;
-    private final ClassProviderWithFallback classProvider;
-    private final Instrumentation instrumentation;
-    private final File modsFolder;
-    private final RefmapSupportingTransformManager transformerManager;
+    public final String[] transformers;
+    public final String[] refmaps;
+    public final String[] initializers;
+    public final ClassProviderWithFallback classProvider;
+    public final Instrumentation instrumentation;
+    public final File modsFolder;
+    public final RefmapSupportingTransformManager transformerManager;
 
-    private Map<String, Map<String, List<String>>> transformerList;
+    public Map<String, Map<String, List<String>>> transformerList;
 
     public JarModder(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
@@ -40,6 +39,9 @@ public class JarModder implements ClassFileTransformer {
             .map(it -> it.split(File.pathSeparator))
             .orElse(new String[0]);
         refmaps = Optional.ofNullable(System.getProperty(JarModAgent.REFMAPS))
+            .map(it -> it.split(File.pathSeparator))
+            .orElse(new String[0]);
+        initializers = Optional.ofNullable(System.getProperty(JarModAgent.INITIALIZERS))
             .map(it -> it.split(File.pathSeparator))
             .orElse(new String[0]);
         classProvider = new ClassProviderWithFallback(new PriorityClasspath(Optional.ofNullable(System.getProperty(JarModAgent.PRIORITY_CLASSPATH))
@@ -72,10 +74,11 @@ public class JarModder implements ClassFileTransformer {
         RefmapBuilder refmapBuilder = new RefmapBuilder(classProvider.priorityClasspath);
         System.out.println("[JarModAgent] Registering transforms");
         debug("Transformers: " + Arrays.toString(transformers));
+        List<String> initializers = new ArrayList<>(Arrays.asList(this.initializers));
         if (modsFolder != null)
-            boostrapModsFolder(transformBuilder, refmapBuilder);
+            boostrapModsFolder(transformBuilder, refmapBuilder, initializers);
         for (File file : extra) {
-            boostrapModJar(file, transformBuilder, refmapBuilder);
+            boostrapModJar(file, transformBuilder, refmapBuilder, initializers);
         }
         for (String transformer : transformers) {
             transformBuilder.addTransformer(transformer);
@@ -89,9 +92,20 @@ public class JarModder implements ClassFileTransformer {
         debug("Transformer list: " + transformerList);
         debug("Refmap list: " + transformerManager.refmap);
         System.out.println("[JarModAgent] Building transform list done, " + transformerList.size() + " classes targeted");
+        for (String initializer : initializers) {
+            try {
+                Class<?> clazz = classProvider.priorityClasspath.loadClass(initializer);
+                JMAInitializer init = (JMAInitializer) clazz.getConstructor().newInstance();
+                init.jmaMain(this);
+            } catch (Exception e) {
+                System.err.println("[JarModAgent] Failed to initialize " + initializer);
+                e.printStackTrace();
+                System.exit(1);
+            }
+        }
     }
 
-    private void boostrapModsFolder(TransformerListBuilder builder, RefmapBuilder refmapBuilder) throws IOException {
+    private void boostrapModsFolder(TransformerListBuilder builder, RefmapBuilder refmapBuilder, List<String> initializers) {
         System.out.println("[JarModAgent] Bootstrapping mods folder");
         Deque<File> files = new ArrayDeque<>();
         File[] modsFolderFiles = modsFolder.listFiles();
@@ -107,7 +121,7 @@ public class JarModder implements ClassFileTransformer {
             File file = files.removeFirst();
             if (file.isFile() && (file.getName().endsWith(".jar") || file.getName().endsWith(".zip"))) {
                 try {
-                    j += boostrapModJar(file, builder, refmapBuilder);
+                    j += boostrapModJar(file, builder, refmapBuilder, initializers);
                     i++;
                 } catch (IOException e) {
                     System.out.println("[JarModAgent] Failed to bootstrap " + file.getName());
@@ -124,7 +138,7 @@ public class JarModder implements ClassFileTransformer {
         System.out.println("[JarModAgent] Bootstrapped " + i + " mods, with " + j + " transforms");
     }
 
-    private int boostrapModJar(File file, TransformerListBuilder builder, RefmapBuilder refmapBuilder) throws IOException {
+    private int boostrapModJar(File file, TransformerListBuilder builder, RefmapBuilder refmapBuilder, List<String> initalizers) throws IOException {
         int j = 0;
         file = file.getCanonicalFile();
         JarFile jf = new JarFile(file);
@@ -139,15 +153,21 @@ public class JarModder implements ClassFileTransformer {
         if (mf != null) {
             String transforms = mf.getMainAttributes().getValue(JarModAgent.JMA_TRANSFORMS_PROPERTY);
             if (transforms != null) {
-                for (String transformer : transforms.split(",")) {
+                for (String transformer : transforms.split(" ")) {
                     builder.addTransformer(transformer);
                     j++;
                 }
             }
             String refmaps = mf.getMainAttributes().getValue(JarModAgent.JMA_REFMAPS_PROPERTY);
             if (refmaps != null) {
-                for (String refmap : refmaps.split(",")) {
+                for (String refmap : refmaps.split(" ")) {
                     refmapBuilder.addRefmap(refmap);
+                }
+            }
+            String initializers = mf.getMainAttributes().getValue(JarModAgent.JMA_INITIALIZERS_PROPERTY);
+            if (initializers != null) {
+                for (String initializer : initializers.split(" ")) {
+                    initalizers.add(initializer);
                 }
             }
         }
@@ -180,7 +200,7 @@ public class JarModder implements ClassFileTransformer {
                 System.exit(1);
                 return null;
             }
-            if (priorityUrls.size() == 0) {
+            if (priorityUrls.isEmpty()) {
                 System.err.println("Non-Patch version of class does not exist!");
                 System.exit(1);
                 return null;
@@ -209,12 +229,12 @@ public class JarModder implements ClassFileTransformer {
                         " are using a mod that claims to support the other; jarmod the supported one directly, so it's lower priority.");
                 System.exit(1);
                 return null;
-            } else if (priorityUrls.size() == 0) {
+            } else if (priorityUrls.isEmpty()) {
                 return patch(className, base.get());
             } else {
                 return patch(className, (URL) priorityUrls.values().toArray()[0]);
             }
-        } else if (priorityUrls.size() != 0) {
+        } else if (!priorityUrls.isEmpty()) {
             // once in priority classpath
             debug("Found class override: \"" + className + "\" in priority classpath");
             debug(priorityUrls.values().toArray()[0].toString());
@@ -257,7 +277,7 @@ public class JarModder implements ClassFileTransformer {
     }
 
     @Override
-    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) throws IllegalClassFormatException {
+    public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
         try {
             classProvider.setFallback(loader);
             Map<String, URL> urls = enumerationToList(loader.getResources(
