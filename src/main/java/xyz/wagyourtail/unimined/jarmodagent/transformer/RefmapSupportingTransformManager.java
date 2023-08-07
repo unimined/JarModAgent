@@ -1,6 +1,7 @@
 package xyz.wagyourtail.unimined.jarmodagent.transformer;
 
 import net.lenni0451.classtransform.TransformerManager;
+import net.lenni0451.classtransform.mappings.annotation.AnnotationRemap;
 import net.lenni0451.classtransform.utils.ASMUtils;
 import net.lenni0451.classtransform.utils.tree.IClassProvider;
 import org.objectweb.asm.*;
@@ -9,8 +10,10 @@ import xyz.wagyourtail.unimined.jarmodagent.JarModAgent;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -63,7 +66,7 @@ public class RefmapSupportingTransformManager extends TransformerManager {
         @Override
         public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
             AnnotationVisitor av = super.visitAnnotation(descriptor, visible);
-            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false);
         }
 
         @Override
@@ -73,7 +76,7 @@ public class RefmapSupportingTransformManager extends TransformerManager {
                 @Override
                 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                     AnnotationVisitor av = super.visitAnnotation(descriptor, visible);
-                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false);
                 }
             };
         }
@@ -85,30 +88,76 @@ public class RefmapSupportingTransformManager extends TransformerManager {
                 @Override
                 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
                     AnnotationVisitor av = super.visitAnnotation(descriptor, visible);
-                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false);
                 }
 
                 @Override
                 public AnnotationVisitor visitParameterAnnotation(int parameter, String descriptor, boolean visible) {
                     AnnotationVisitor av = super.visitParameterAnnotation(parameter, descriptor, visible);
-                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+                    return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false);
                 }
             };
         }
     }
 
     public static class RemappingAnnotationVisitor extends AnnotationVisitor {
-        Map<String, String> refmap;
+        private static final Set<String> failed = new HashSet<>();
 
-        protected RemappingAnnotationVisitor(int api, AnnotationVisitor annotationVisitor, Map<String, String> refmap) {
+        Map<String, String> refmap;
+        boolean allowNullNameRemap;
+        Class<?> annotationType;
+
+
+        protected RemappingAnnotationVisitor(int api, AnnotationVisitor annotationVisitor, Map<String, String> refmap, String descriptor, boolean allowNullNameRemap) {
             super(api, annotationVisitor);
             this.refmap = refmap;
+            this.allowNullNameRemap = allowNullNameRemap;
+            try {
+                if (descriptor != null) {
+                    if (descriptor.startsWith("L")) descriptor = descriptor.substring(1);
+                    if (descriptor.endsWith(";")) descriptor = descriptor.substring(0, descriptor.length() - 1);
+                    this.annotationType = Class.forName(descriptor.replace('/', '.'));
+                }
+            } catch (ClassNotFoundException e) {
+                if (failed.add(descriptor)) {
+                    System.err.println("[JarModAgent] Failed to find annotation class " + descriptor);
+                }
+            }
+            JarModder.debug("remapping annotation " + descriptor);
+        }
+
+        public boolean testName(String name) {
+            if (name == null) {
+                if (allowNullNameRemap) {
+                    return true;
+                } else {
+                    name = "value";
+                }
+            }
+            if (annotationType != null) {
+                try {
+                    Method m = annotationType.getDeclaredMethod(name);
+                    if (m.getAnnotation(AnnotationRemap.class) == null) {
+                        JarModder.debug("not remapping " + name + " because it doesn't have @AnnotationRemap");
+                        return false;
+                    }
+                } catch (NoSuchMethodException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                return false;
+            }
+            return true;
         }
 
         @Override
         public void visit(String name, Object value) {
+            if (!testName(name)) {
+                super.visit(name, value);
+                return;
+            }
             if (value instanceof String) {
-                System.out.println("remapping \"" + name + "\" \"" + value + "\" to \"" + refmap.getOrDefault(value, (String) value) + "\"");
+                JarModder.debug("remapping \"" + name + "\" \"" + value + "\" to \"" + refmap.getOrDefault(value, (String) value) + "\"");
                 super.visit(name, refmap.getOrDefault(value, (String) value));
             } else {
                 super.visit(name, value);
@@ -118,13 +167,13 @@ public class RefmapSupportingTransformManager extends TransformerManager {
         @Override
         public AnnotationVisitor visitAnnotation(String name, String descriptor) {
             AnnotationVisitor av = super.visitAnnotation(name, descriptor);
-            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false);
         }
 
         @Override
         public AnnotationVisitor visitArray(String name) {
             AnnotationVisitor av = super.visitArray(name);
-            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap);
+            return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, null, true);
         }
     }
 }
