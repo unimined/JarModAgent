@@ -19,15 +19,17 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
 public class JarModder implements ClassFileTransformer {
 
     private final String[] transformers;
+    private final String[] refmaps;
     private final ClassProviderWithFallback classProvider;
     private final Instrumentation instrumentation;
     private final File modsFolder;
-    private final TransformerManager transformerManager;
+    private final RefmapSupportingTransformManager transformerManager;
 
     private Map<String, Map<String, List<String>>> transformerList;
 
@@ -35,6 +37,9 @@ public class JarModder implements ClassFileTransformer {
         this.instrumentation = instrumentation;
 
         transformers = Optional.ofNullable(System.getProperty(JarModAgent.TRANSFORMERS))
+            .map(it -> it.split(File.pathSeparator))
+            .orElse(new String[0]);
+        refmaps = Optional.ofNullable(System.getProperty(JarModAgent.REFMAPS))
             .map(it -> it.split(File.pathSeparator))
             .orElse(new String[0]);
         classProvider = new ClassProviderWithFallback(new PriorityClasspath(Optional.ofNullable(System.getProperty(JarModAgent.PRIORITY_CLASSPATH))
@@ -54,7 +59,7 @@ public class JarModder implements ClassFileTransformer {
             modsFolder = null;
         }
 
-        transformerManager = new TransformerManager(classProvider);
+        transformerManager = new RefmapSupportingTransformManager(classProvider);
         debug("Args: ");
         debug("  Transformers: " + Arrays.toString(transformers));
         debug("  Priority classpath: " + Arrays.toString(classProvider.priorityClasspath.getURLs()));
@@ -62,48 +67,64 @@ public class JarModder implements ClassFileTransformer {
 
     }
 
-    public void registerTransforms(File[] extra) throws IOException {
-        TransformerListBuilder builder = new TransformerListBuilder(classProvider.priorityClasspath);
+    public void register(File... extra) throws IOException {
+        TransformerListBuilder transformBuilder = new TransformerListBuilder(classProvider.priorityClasspath);
+        RefmapBuilder refmapBuilder = new RefmapBuilder(classProvider.priorityClasspath);
         System.out.println("[JarModAgent] Registering transforms");
         debug("Transformers: " + Arrays.toString(transformers));
         if (modsFolder != null)
-            boostrapModsFolder(builder);
+            boostrapModsFolder(transformBuilder, refmapBuilder);
         for (File file : extra) {
-            boostrapModJar(file, builder);
+            boostrapModJar(file, transformBuilder, refmapBuilder);
         }
         for (String transformer : transformers) {
-            builder.addTransformer(transformer);
+            transformBuilder.addTransformer(transformer);
         }
+        for (String refmap : refmaps) {
+            refmapBuilder.addRefmap(refmap);
+        }
+        refmapBuilder.build(transformerManager);
         System.out.println("[JarModAgent] Building transform list");
-        transformerList = builder.build(transformerManager, classProvider);
+        transformerList = transformBuilder.build(transformerManager, classProvider);
         debug("Transformer list: " + transformerList);
+        debug("Refmap list: " + transformerManager.refmap);
         System.out.println("[JarModAgent] Building transform list done, " + transformerList.size() + " classes targeted");
     }
 
-    private void boostrapModsFolder(TransformerListBuilder builder) {
+    private void boostrapModsFolder(TransformerListBuilder builder, RefmapBuilder refmapBuilder) throws IOException {
         System.out.println("[JarModAgent] Bootstrapping mods folder");
-        File[] files = modsFolder.listFiles();
-        if (files == null) {
+        Deque<File> files = new ArrayDeque<>();
+        File[] modsFolderFiles = modsFolder.listFiles();
+        if (modsFolderFiles == null) {
             System.out.println("[JarModAgent] No files found in mods folder!");
             return;
         }
+        files.addAll(Arrays.asList(modsFolderFiles));
         int i = 0;
         int j = 0;
-        for (File file : files) {
-            if (file.isFile()) {
+        // directory traversal
+        while (!files.isEmpty()) {
+            File file = files.removeFirst();
+            if (file.isFile() && (file.getName().endsWith(".jar") || file.getName().endsWith(".zip"))) {
                 try {
-                    j += boostrapModJar(file, builder);
+                    j += boostrapModJar(file, builder, refmapBuilder);
                     i++;
                 } catch (IOException e) {
                     System.out.println("[JarModAgent] Failed to bootstrap " + file.getName());
                     System.out.println("[JarModAgent] " + e.getMessage());
+                }
+            } else if (file.isDirectory()) {
+                if (Boolean.getBoolean(JarModAgent.DISABLE_MODS_FOLDER_RECURSIVE)) continue;
+                File[] subFiles = file.listFiles();
+                if (subFiles != null) {
+                    files.addAll(Arrays.asList(subFiles));
                 }
             }
         }
         System.out.println("[JarModAgent] Bootstrapped " + i + " mods, with " + j + " transforms");
     }
 
-    private int boostrapModJar(File file, TransformerListBuilder builder) throws IOException {
+    private int boostrapModJar(File file, TransformerListBuilder builder, RefmapBuilder refmapBuilder) throws IOException {
         int j = 0;
         file = file.getCanonicalFile();
         JarFile jf = new JarFile(file);
@@ -114,11 +135,20 @@ public class JarModder implements ClassFileTransformer {
             instrumentation.appendToSystemClassLoaderSearch(jf);
         }
         // get transforms from manifest
-        String transforms = jf.getManifest().getMainAttributes().getValue("JarModAgent-Transforms");
-        if (transforms != null) {
-            for (String transformer : transforms.split(",")) {
-                builder.addTransformer(transformer);
-                j++;
+        Manifest mf = jf.getManifest();
+        if (mf != null) {
+            String transforms = mf.getMainAttributes().getValue(JarModAgent.JMA_TRANSFORMS_PROPERTY);
+            if (transforms != null) {
+                for (String transformer : transforms.split(",")) {
+                    builder.addTransformer(transformer);
+                    j++;
+                }
+            }
+            String refmaps = mf.getMainAttributes().getValue(JarModAgent.JMA_REFMAPS_PROPERTY);
+            if (refmaps != null) {
+                for (String refmap : refmaps.split(",")) {
+                    refmapBuilder.addRefmap(refmap);
+                }
             }
         }
         return j;

@@ -20,12 +20,18 @@ java {
 
 repositories {
     mavenCentral()
+    maven("https://maven.quiltmc.org/repository/release")
 }
 
 dependencies {
 
     // class transform
-    implementation("net.lenni0451.classtransform:core:1.8.4")
+    implementation("net.lenni0451.classtransform:core:1.10.0")
+
+    // qup
+    implementation("org.quiltmc.qup:json:0.2.0") {
+        isTransitive = false
+    }
 }
 
 tasks.compileJava {
@@ -48,6 +54,7 @@ tasks.jar {
 
 tasks.shadowJar {
     relocate("org.objectweb", "xyz.wagyourtail.unimined.jarmodagent.shadow.org.objectweb")
+    relocate("org.quiltmc.qup.json", "xyz.wagyourtail.unimined.jarmodagent.shadow.org.quiltmc.qup.json")
 }
 
 publishing {
