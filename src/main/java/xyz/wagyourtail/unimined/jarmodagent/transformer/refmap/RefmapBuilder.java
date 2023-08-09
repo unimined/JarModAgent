@@ -1,6 +1,7 @@
-package xyz.wagyourtail.unimined.jarmodagent.transformer;
+package xyz.wagyourtail.unimined.jarmodagent.transformer.refmap;
 
 import org.quiltmc.qup.json.JsonReader;
+import xyz.wagyourtail.unimined.jarmodagent.JarModder;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -27,7 +28,7 @@ public class RefmapBuilder {
         JarModder.debug("Found " + refmapUrls.size() + " refmaps at " + refmap);
     }
 
-    public void build(RefmapSupportingTransformManager transformManager) {
+    public Map<String, Map<String, String>> build() {
         // { [transformClass] -> { [targetStr] -> [remap] }
         Map<String, Map<String, String>> refmaps = new HashMap<>();
         for (URL url : refmapUrls) {
@@ -37,12 +38,12 @@ public class RefmapBuilder {
                     refmaps.computeIfAbsent(entry.getKey(), s -> new HashMap<>()).putAll(entry.getValue());
                 }
             } catch (IOException e) {
-                System.err.println("Failed to load refmap: " + url);
+                System.err.println("[JarModAgent] Failed to load refmap: " + url);
                 e.printStackTrace();
                 System.exit(1);
             }
         }
-        transformManager.addRefmap(refmaps);
+        return refmaps;
     }
 
     public Map<String, Map<String, String>> readRefmap(URL refmap) throws IOException {

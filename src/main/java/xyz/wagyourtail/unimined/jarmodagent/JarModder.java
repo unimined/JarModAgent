@@ -1,6 +1,10 @@
-package xyz.wagyourtail.unimined.jarmodagent.transformer;
+package xyz.wagyourtail.unimined.jarmodagent;
 
-import xyz.wagyourtail.unimined.jarmodagent.JarModAgent;
+import net.lenni0451.classtransform.TransformerManager;
+import xyz.wagyourtail.unimined.jarmodagent.transformer.ClassProviderWithFallback;
+import xyz.wagyourtail.unimined.jarmodagent.transformer.refmap.RefmapAnnotationPreprocessor;
+import xyz.wagyourtail.unimined.jarmodagent.transformer.TransformerListBuilder;
+import xyz.wagyourtail.unimined.jarmodagent.transformer.refmap.RefmapBuilder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -22,15 +26,20 @@ import java.util.stream.Collectors;
 
 public class JarModder implements ClassFileTransformer {
 
-    public final String[] transformers;
-    public final String[] refmaps;
-    public final String[] initializers;
+    private final String[] transformers;
+    private final String[] refmaps;
+    private final String[] initializers;
+
     public final ClassProviderWithFallback classProvider;
     public final Instrumentation instrumentation;
     public final File modsFolder;
-    public final RefmapSupportingTransformManager transformerManager;
 
-    public Map<String, Map<String, List<String>>> transformerList;
+    /**
+     * please don't add transformers directly, go through {@link TransformerListBuilder#addTransformer(URL)}
+     */
+    public final TransformerManager transformerManager;
+
+    private Map<String, Map<String, List<String>>> transformerList;
 
     public JarModder(Instrumentation instrumentation) {
         this.instrumentation = instrumentation;
@@ -61,7 +70,7 @@ public class JarModder implements ClassFileTransformer {
             modsFolder = null;
         }
 
-        transformerManager = new RefmapSupportingTransformManager(classProvider);
+        transformerManager = new TransformerManager(classProvider);
         debug("Args: ");
         debug("  Transformers: " + Arrays.toString(transformers));
         debug("  Priority classpath: " + Arrays.toString(classProvider.priorityClasspath.getURLs()));
@@ -86,23 +95,23 @@ public class JarModder implements ClassFileTransformer {
         for (String refmap : refmaps) {
             refmapBuilder.addRefmap(refmap);
         }
-        refmapBuilder.build(transformerManager);
-        System.out.println("[JarModAgent] Building transform list");
-        transformerList = transformBuilder.build(transformerManager, classProvider);
-        debug("Transformer list: " + transformerList);
-        debug("Refmap list: " + transformerManager.refmap);
-        System.out.println("[JarModAgent] Building transform list done, " + transformerList.size() + " classes targeted");
+        System.out.println("[JarModAgent] Running mod initializers");
         for (String initializer : initializers) {
             try {
                 Class<?> clazz = classProvider.priorityClasspath.loadClass(initializer);
                 JMAInitializer init = (JMAInitializer) clazz.getConstructor().newInstance();
-                init.jmaMain(this);
+                init.jmaMain(this, transformBuilder, refmapBuilder);
             } catch (Exception e) {
                 System.err.println("[JarModAgent] Failed to initialize " + initializer);
                 e.printStackTrace();
                 System.exit(1);
             }
         }
+        System.out.println("[JarModAgent] Building transform list");
+        transformerManager.addTransformerPreprocessor(new RefmapAnnotationPreprocessor(refmapBuilder.build(), classProvider.priorityClasspath, transformerManager));
+        transformerList = transformBuilder.build(transformerManager, classProvider);
+        debug("Transformer list: " + transformerList);
+        System.out.println("[JarModAgent] Building transform list done, " + transformerList.size() + " classes targeted");
     }
 
     private void boostrapModsFolder(TransformerListBuilder builder, RefmapBuilder refmapBuilder, List<String> initializers) {

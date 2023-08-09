@@ -4,6 +4,7 @@ import net.lenni0451.classtransform.TransformerManager;
 import net.lenni0451.classtransform.utils.tree.IClassProvider;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.ClassNode;
+import xyz.wagyourtail.unimined.jarmodagent.JarModder;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -24,6 +25,10 @@ public class TransformerListBuilder {
         List<URL> urls = JarModder.enumerationToList(priorityClasspath.getResources(transformer));
         transformerUrls.addAll(urls);
         JarModder.debug("Found " + transformerUrls.size() + " transformers at " + transformer);
+    }
+
+    public void addTransformer(URL transformer) {
+        transformerUrls.add(transformer);
     }
 
     // { [targetClass] -> { [transformListUri] -> transform[] }

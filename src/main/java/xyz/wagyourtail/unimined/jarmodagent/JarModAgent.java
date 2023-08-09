@@ -1,7 +1,5 @@
 package xyz.wagyourtail.unimined.jarmodagent;
 
-import xyz.wagyourtail.unimined.jarmodagent.transformer.JarModder;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.instrument.Instrumentation;
@@ -34,7 +32,7 @@ public class JarModAgent {
     public static final String JMA_TRANSFORMS_PROPERTY = "JarModAgent-Transforms";
 
     /**
-     * property for META-INF/MANIFEST.MF to specify any {@link xyz.wagyourtail.unimined.jarmodagent.transformer.JMAInitializer}'s to load.
+     * property for META-INF/MANIFEST.MF to specify any {@link JMAInitializer}'s to load.
      * @since 0.1.4
      */
     public static final String JMA_INITIALIZERS_PROPERTY = "JarModAgent-Initializers";
@@ -52,7 +50,7 @@ public class JarModAgent {
     public static final String REFMAPS = "jma.refmaps";
 
     /**
-     * File.pathSeparator separated list of {@link xyz.wagyourtail.unimined.jarmodagent.transformer.JMAInitializer}'s to load.
+     * File.pathSeparator separated list of {@link JMAInitializer}'s to load.
      * @since 0.1.4
      */
     public static final String INITIALIZERS = "jma.initializers";

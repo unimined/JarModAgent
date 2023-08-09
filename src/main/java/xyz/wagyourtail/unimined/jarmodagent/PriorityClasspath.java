@@ -1,4 +1,4 @@
-package xyz.wagyourtail.unimined.jarmodagent.transformer;
+package xyz.wagyourtail.unimined.jarmodagent;
 
 import java.io.IOException;
 import java.io.InputStream;

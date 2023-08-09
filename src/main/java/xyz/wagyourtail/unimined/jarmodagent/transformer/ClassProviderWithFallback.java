@@ -1,15 +1,15 @@
 package xyz.wagyourtail.unimined.jarmodagent.transformer;
 
-import net.lenni0451.classtransform.utils.tree.BasicClassProvider;
 import net.lenni0451.classtransform.utils.tree.IClassProvider;
+import xyz.wagyourtail.unimined.jarmodagent.JarModder;
+import xyz.wagyourtail.unimined.jarmodagent.PriorityClasspath;
 
 import java.io.InputStream;
-import java.net.URL;
 import java.util.Map;
 import java.util.function.Supplier;
 
 public class ClassProviderWithFallback implements IClassProvider {
-    PriorityClasspath priorityClasspath;
+    public PriorityClasspath priorityClasspath;
     ClassLoader fallback;
 
 
