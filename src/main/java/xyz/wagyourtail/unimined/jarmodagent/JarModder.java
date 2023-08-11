@@ -247,7 +247,10 @@ public class JarModder implements ClassFileTransformer {
             // once in priority classpath
             debug("Found class override: \"" + className + "\" in priority classpath");
             debug(priorityUrls.values().toArray()[0].toString());
-            // doesn't need runtime transform stuff, so we can return the bytes from the priority classpath
+            if (hasRuntimePatches(className)) {
+                debug("Found class with runtime patches: \"" + className + "\"");
+                return patch(className, (URL) priorityUrls.values().toArray()[0]);
+            }
             return readAllBytes(((URL) priorityUrls.values().toArray()[0]).openStream());
         }
 
@@ -255,7 +258,7 @@ public class JarModder implements ClassFileTransformer {
             debug("Found class with runtime patches: \"" + className + "\"");
             return patch(className, base.get());
         }
-        return null;
+        return readAllBytes(base.get().openStream());
 
     }
 
@@ -399,7 +402,7 @@ public class JarModder implements ClassFileTransformer {
         return transformerList.keySet();
     }
 
-    public static byte[] readAllBytes(InputStream is) {
+    public static byte[] readAllBytes(InputStream is) throws IOException {
         byte[] buffer = new byte[8192];
         int bytesRead;
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -410,6 +413,7 @@ public class JarModder implements ClassFileTransformer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        is.close();
         return output.toByteArray();
     }
 

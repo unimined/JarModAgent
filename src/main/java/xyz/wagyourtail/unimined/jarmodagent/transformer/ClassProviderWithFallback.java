@@ -4,6 +4,7 @@ import net.lenni0451.classtransform.utils.tree.IClassProvider;
 import xyz.wagyourtail.unimined.jarmodagent.JarModder;
 import xyz.wagyourtail.unimined.jarmodagent.PriorityClasspath;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -28,7 +29,11 @@ public class ClassProviderWithFallback implements IClassProvider {
         if (is == null && fallback != null) {
             is = fallback.getResourceAsStream(name.replace('.', '/') + ".class");
         }
-        return JarModder.readAllBytes(is);
+        try {
+            return JarModder.readAllBytes(is);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public Map<String, Supplier<byte[]>> getAllClasses() {
