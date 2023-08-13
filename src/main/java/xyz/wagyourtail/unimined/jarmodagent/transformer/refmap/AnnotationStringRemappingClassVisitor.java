@@ -24,7 +24,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
             dontRemap = new DontRemapAnnotationVisitor(api, av);
             return dontRemap;
         }
-        if (dontRemap.skip) return av;
+        if (dontRemap != null && dontRemap.skip) return av;
         return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath, dontRemap) {
             @Override
             public void visitEnd() {
@@ -45,7 +45,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
                     dontRemap = new DontRemapAnnotationVisitor(api, av);
                     return dontRemap;
                 }
-                if (dontRemap.skip) return av;
+                if (dontRemap != null && dontRemap.skip) return av;
                 return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath, dontRemap) {
                     @Override
                     public void visitEnd() {
@@ -57,7 +57,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
 
             @Override
             public void visitEnd() {
-                if (!dontRemap.skip) dontRemap = null;
+                if (dontRemap != null && !dontRemap.skip) dontRemap = null;
                 super.visitEnd();
             }
         };
@@ -74,7 +74,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
                     dontRemap = new DontRemapAnnotationVisitor(api, av);
                     return dontRemap;
                 }
-                if (dontRemap.skip) return av;
+                if (dontRemap != null && dontRemap.skip) return av;
                 return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath, dontRemap) {
                     @Override
                     public void visitEnd() {
@@ -91,7 +91,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
                     dontRemap = new DontRemapAnnotationVisitor(api, av);
                     return dontRemap;
                 }
-                if (dontRemap.skip) return av;
+                if (dontRemap != null && dontRemap.skip) return av;
                 return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath, dontRemap) {
                     @Override
                     public void visitEnd() {
@@ -103,7 +103,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
 
             @Override
             public void visitEnd() {
-                if (!dontRemap.skip) dontRemap = null;
+                if (dontRemap != null && !dontRemap.skip) dontRemap = null;
                 super.visitEnd();
             }
         };
