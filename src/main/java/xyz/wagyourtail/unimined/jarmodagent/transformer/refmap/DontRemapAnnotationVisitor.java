@@ -24,7 +24,7 @@ public class DontRemapAnnotationVisitor extends AnnotationVisitor {
 
     @Override
     public AnnotationVisitor visitArray(String name) {
-        if ("dontRemap".equals(name)) {
+        if ("value".equals(name) || name == null) {
             return new AnnotationVisitor(api, super.visitArray(name)) {
                 @Override
                 public void visit(String name, Object value) {
