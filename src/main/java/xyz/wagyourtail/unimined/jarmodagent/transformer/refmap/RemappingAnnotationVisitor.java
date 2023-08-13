@@ -2,6 +2,7 @@ package xyz.wagyourtail.unimined.jarmodagent.transformer.refmap;
 
 import net.lenni0451.classtransform.mappings.annotation.AnnotationRemap;
 import org.objectweb.asm.AnnotationVisitor;
+import org.objectweb.asm.Type;
 import xyz.wagyourtail.unimined.jarmodagent.JarModder;
 import xyz.wagyourtail.unimined.jarmodagent.PriorityClasspath;
 
@@ -17,13 +18,17 @@ public class RemappingAnnotationVisitor extends AnnotationVisitor {
     boolean allowNullNameRemap;
     Class<?> annotationType;
     PriorityClasspath classpath;
+    DontRemapAnnotationVisitor dontRemap;
+    boolean skip;
 
 
-    protected RemappingAnnotationVisitor(int api, AnnotationVisitor annotationVisitor, Map<String, String> refmap, String descriptor, boolean allowNullNameRemap, PriorityClasspath classpath) {
+    protected RemappingAnnotationVisitor(int api, AnnotationVisitor annotationVisitor, Map<String, String> refmap, String descriptor, boolean allowNullNameRemap, PriorityClasspath classpath, DontRemapAnnotationVisitor dontRemap) {
         super(api, annotationVisitor);
         this.refmap = refmap;
         this.allowNullNameRemap = allowNullNameRemap;
         this.classpath = classpath;
+        this.dontRemap = dontRemap;
+        skip = dontRemap.dontRemap.isEmpty() || dontRemap.dontRemap.contains(Type.getType(descriptor));
         try {
             if (descriptor != null) {
                 if (descriptor.startsWith("L")) descriptor = descriptor.substring(1);
@@ -57,14 +62,14 @@ public class RemappingAnnotationVisitor extends AnnotationVisitor {
                 throw new RuntimeException(e);
             }
         } else {
-            return false;
+            return true;
         }
         return true;
     }
 
     @Override
     public void visit(String name, Object value) {
-        if (!testName(name)) {
+        if (!testName(name) || skip) {
             super.visit(name, value);
             return;
         }
@@ -79,12 +84,15 @@ public class RemappingAnnotationVisitor extends AnnotationVisitor {
     @Override
     public AnnotationVisitor visitAnnotation(String name, String descriptor) {
         AnnotationVisitor av = super.visitAnnotation(name, descriptor);
-        return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath);
+        return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, descriptor, false, classpath, dontRemap);
     }
 
     @Override
     public AnnotationVisitor visitArray(String name) {
         AnnotationVisitor av = super.visitArray(name);
-        return av == null ? null : new RemappingAnnotationVisitor(api, av, refmap, null, true, classpath);
+        if (av == null) return null;
+        RemappingAnnotationVisitor rav = new RemappingAnnotationVisitor(api, av, refmap, null, true, classpath, dontRemap);
+        if (skip) rav.skip = true;
+        return rav;
     }
 }
