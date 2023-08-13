@@ -57,7 +57,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
 
             @Override
             public void visitEnd() {
-                dontRemap = null;
+                if (!dontRemap.skip) dontRemap = null;
                 super.visitEnd();
             }
         };
@@ -103,7 +103,7 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
 
             @Override
             public void visitEnd() {
-                dontRemap = null;
+                if (!dontRemap.skip) dontRemap = null;
                 super.visitEnd();
             }
         };
