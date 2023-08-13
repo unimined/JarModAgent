@@ -54,6 +54,12 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
                     }
                 };
             }
+
+            @Override
+            public void visitEnd() {
+                dontRemap = null;
+                super.visitEnd();
+            }
         };
     }
 
@@ -93,6 +99,12 @@ public class AnnotationStringRemappingClassVisitor extends ClassVisitor {
                         super.visitEnd();
                     }
                 };
+            }
+
+            @Override
+            public void visitEnd() {
+                dontRemap = null;
+                super.visitEnd();
             }
         };
     }
