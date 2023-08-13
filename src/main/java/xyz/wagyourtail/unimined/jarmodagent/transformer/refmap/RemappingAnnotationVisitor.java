@@ -28,7 +28,7 @@ public class RemappingAnnotationVisitor extends AnnotationVisitor {
         this.allowNullNameRemap = allowNullNameRemap;
         this.classpath = classpath;
         this.dontRemap = dontRemap;
-        skip = dontRemap.dontRemap.isEmpty() || dontRemap.dontRemap.contains(Type.getType(descriptor));
+        skip = dontRemap != null && (dontRemap.dontRemap.isEmpty() || dontRemap.dontRemap.contains(Type.getType(descriptor)));
         try {
             if (descriptor != null) {
                 if (descriptor.startsWith("L")) descriptor = descriptor.substring(1);
