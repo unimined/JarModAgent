@@ -26,7 +26,7 @@ repositories {
 dependencies {
 
     // class transform
-    implementation("net.lenni0451.classtransform:core:1.10.1")
+    implementation("net.lenni0451.classtransform:core:1.12.1")
 
     // qup
     implementation("org.quiltmc.qup:json:0.2.0") {
