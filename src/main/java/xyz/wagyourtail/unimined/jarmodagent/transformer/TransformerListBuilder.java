@@ -50,7 +50,7 @@ public class TransformerListBuilder {
                             .add(line);
                     }
                 }
-            } catch (IOException e) {
+            } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
                 System.err.println("Failed to load transformer: " + url);
                 System.exit(1);
