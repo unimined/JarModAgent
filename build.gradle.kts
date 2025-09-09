@@ -3,19 +3,17 @@ import java.net.URI
 plugins {
     java
     `maven-publish`
-    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.gradleup.shadow") version "9.1.0"
+    id("xyz.wagyourtail.commons-gradle") version "1.0.5-SNAPSHOT"
 }
 
 version = if (project.hasProperty("version_snapshot")) project.properties["version"] as String + "-SNAPSHOT" else project.properties["version"] as String
 group = project.properties["maven_group"] as String
 
+commons.autoToolchain(8, 17)
+
 base {
     archivesName.set(project.properties["archives_base_name"] as String)
-}
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_1_8
-    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 repositories {
@@ -26,20 +24,24 @@ repositories {
 dependencies {
 
     // class transform
-    implementation("net.lenni0451.classtransform:core:1.12.1")
+    implementation("net.lenni0451.classtransform:core:1.14.1")
 
     // qup
     implementation("org.quiltmc.qup:json:0.2.0") {
         isTransitive = false
     }
+
+    testImplementation("org.ow2.asm:asm:9.2")
+    testImplementation("org.ow2.asm:asm-commons:9.2")
+    testImplementation("org.ow2.asm:asm-tree:9.2")
+
+    testImplementation("net.lenni0451:Reflect:1.5.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.2")
 }
 
-tasks.compileJava {
-    options.encoding = "UTF-8"
-
-    if (JavaVersion.current().isJava9Compatible) {
-        options.release.set(8)
-    }
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.jar {

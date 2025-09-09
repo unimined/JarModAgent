@@ -258,8 +258,9 @@ public class JarModder implements ClassFileTransformer {
             debug("Found class with runtime patches: \"" + className + "\"");
             return patch(className, base.get());
         }
-        return readAllBytes(base.get().openStream());
 
+        // no transform necessary
+        return null;
     }
 
     private String bytesToHex(byte[] hash) {
