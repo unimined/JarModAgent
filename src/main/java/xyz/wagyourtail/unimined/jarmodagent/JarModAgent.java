@@ -86,6 +86,13 @@ public class JarModAgent {
      */
     public static final String DISABLE_MODS_FOLDER_RECURSIVE = "jma.disableModsFolderRecursive";
 
+    /**
+     * ClassTransform {@link net.lenni0451.classtransform.utils.FailStrategy} to use for transformer failures.
+     * one of CONTINUE, CANCEL, EXIT, THROW. defaults to classtransform's default (EXIT).
+     * @since 0.1.5
+     */
+    public static final String FAIL_STRATEGY = "jma.failStrategy";
+
     public static void agentmain(String agentArgs, Instrumentation inst) throws IOException, ClassNotFoundException {
         premain(agentArgs, inst);
     }
@@ -95,7 +102,8 @@ public class JarModAgent {
         System.out.println("[JarModAgent] Version: " + VERSION);
         JarModder jarModder = new JarModder(instrumentation);
         jarModder.register(new File[0]);
-        instrumentation.addTransformer(jarModder);
+        instrumentation.addTransformer(jarModder, instrumentation.isRetransformClassesSupported());
+        jarModder.retransformLoadedClasses();
         System.out.println("[JarModAgent] Agent started");
 
         String chain = System.getProperty("jma.chainAgent");

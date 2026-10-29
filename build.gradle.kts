@@ -3,8 +3,8 @@ import java.net.URI
 plugins {
     java
     `maven-publish`
-    id("com.gradleup.shadow") version "9.1.0"
-    id("xyz.wagyourtail.commons-gradle") version "1.0.5-SNAPSHOT"
+    id("com.gradleup.shadow") version "9.6.1"
+    id("xyz.wagyourtail.commons-gradle") version "1.1.0-SNAPSHOT"
 }
 
 version = if (project.hasProperty("version_snapshot")) project.properties["version"] as String + "-SNAPSHOT" else project.properties["version"] as String
@@ -24,30 +24,37 @@ repositories {
 dependencies {
 
     // class transform
-    implementation("net.lenni0451.classtransform:core:1.14.1")
+    implementation("net.lenni0451.classtransform:core:1.15.1")
+    implementation("net.lenni0451.classtransform:mixinstranslator:1.15.1")
 
     // qup
     implementation("org.quiltmc.qup:json:0.2.0") {
         isTransitive = false
     }
 
-    testImplementation("org.ow2.asm:asm:9.2")
-    testImplementation("org.ow2.asm:asm-commons:9.2")
-    testImplementation("org.ow2.asm:asm-tree:9.2")
+    testImplementation("org.ow2.asm:asm:9.10.1")
+    testImplementation("org.ow2.asm:asm-commons:9.10.1")
+    testImplementation("org.ow2.asm:asm-tree:9.10.1")
 
-    testImplementation("net.lenni0451:Reflect:1.5.0")
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.2")
+    testImplementation("net.lenni0451:Reflect:1.6.4")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
 }
 
 tasks.test {
     useJUnitPlatform()
+    // not a test class: must stay unloadable-by-discovery so JMATest can
+    // exercise defineClass without hitting a duplicate definition
+    exclude("**/DefineClassTarget.class")
 }
 
 tasks.jar {
     manifest {
         attributes(
             "Premain-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
+            "Agent-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
+            "Can-Retransform-Classes" to "true",
             "Main-Class" to "xyz.wagyourtail.unimined.jarmodagent.JarModAgent",
             "Implementation-Version" to project.version,
         )
@@ -87,3 +94,5 @@ publishing {
         }
     }
 }
+
+

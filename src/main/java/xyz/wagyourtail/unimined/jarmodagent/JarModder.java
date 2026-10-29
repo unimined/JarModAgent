@@ -1,6 +1,8 @@
 package xyz.wagyourtail.unimined.jarmodagent;
 
 import net.lenni0451.classtransform.TransformerManager;
+import net.lenni0451.classtransform.mixinstranslator.MixinsTranslator;
+import net.lenni0451.classtransform.utils.FailStrategy;
 import xyz.wagyourtail.unimined.jarmodagent.transformer.ClassProviderWithFallback;
 import xyz.wagyourtail.unimined.jarmodagent.transformer.refmap.RefmapAnnotationPreprocessor;
 import xyz.wagyourtail.unimined.jarmodagent.transformer.TransformerListBuilder;
@@ -71,6 +73,13 @@ public class JarModder implements ClassFileTransformer {
         }
 
         transformerManager = new TransformerManager(classProvider);
+        String failStrategy = System.getProperty(JarModAgent.FAIL_STRATEGY);
+        if (failStrategy != null) {
+            transformerManager.setFailStrategy(FailStrategy.valueOf(failStrategy));
+        }
+        if (JarModAgent.DEBUG) {
+            transformerManager.getDebugger().setDumpClassOnFailure(true);
+        }
         debug("Args: ");
         debug("  Transformers: " + Arrays.toString(transformers));
         debug("  Priority classpath: " + Arrays.toString(classProvider.priorityClasspath.getURLs()));
@@ -108,6 +117,7 @@ public class JarModder implements ClassFileTransformer {
             }
         }
         System.out.println("[JarModAgent] Building transform list");
+        transformerManager.addTransformerPreprocessor(new MixinsTranslator());
         transformerManager.addTransformerPreprocessor(new RefmapAnnotationPreprocessor(refmapBuilder.build(), classProvider.priorityClasspath, transformerManager));
         transformerList = transformBuilder.build(transformerManager, classProvider);
         debug("Transformer list: " + transformerList);
@@ -401,6 +411,45 @@ public class JarModder implements ClassFileTransformer {
 
     public Set<String> getTargetClasses() {
         return transformerList.keySet();
+    }
+
+    /**
+     * Retransform already loaded classes that are transform targets or overridden
+     * by the priority classpath. this is a no-op for premain since the relevant
+     * classes aren't loaded yet; it matters when the agent is attached at runtime
+     * (agentmain) after classes have already been loaded.
+     * @since 0.1.5
+     */
+    public void retransformLoadedClasses() {
+        if (instrumentation == null || !instrumentation.isRetransformClassesSupported() || transformerList == null) {
+            return;
+        }
+        Set<String> candidates = new HashSet<>(transformerList.keySet());
+        candidates.addAll(classProvider.priorityClasspath.getAllClasses().keySet());
+        List<Class<?>> toRetransform = new ArrayList<>();
+        for (Class<?> clazz : instrumentation.getAllLoadedClasses()) {
+            if (candidates.contains(clazz.getName()) && instrumentation.isModifiableClass(clazz)) {
+                toRetransform.add(clazz);
+            }
+        }
+        if (toRetransform.isEmpty()) return;
+        try {
+            instrumentation.retransformClasses(toRetransform.toArray(new Class[0]));
+            System.out.println("[JarModAgent] Retransformed " + toRetransform.size() + " already loaded classes");
+        } catch (Throwable t) {
+            // batch can fail on a single unmodifiable/incompatible class; retry individually
+            int retransformed = 0;
+            for (Class<?> clazz : toRetransform) {
+                try {
+                    instrumentation.retransformClasses(clazz);
+                    retransformed++;
+                } catch (Throwable t2) {
+                    System.err.println("[JarModAgent] Failed to retransform " + clazz.getName());
+                    t2.printStackTrace();
+                }
+            }
+            System.out.println("[JarModAgent] Retransformed " + retransformed + "/" + toRetransform.size() + " already loaded classes");
+        }
     }
 
     public static byte[] readAllBytes(InputStream is) throws IOException {

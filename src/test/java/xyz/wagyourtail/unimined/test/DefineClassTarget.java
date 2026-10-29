@@ -1,6 +1,6 @@
 package xyz.wagyourtail.unimined.test;
 
-public class TestClass {
+public class DefineClassTarget {
 
     public static String test() {
         return "untransformed";

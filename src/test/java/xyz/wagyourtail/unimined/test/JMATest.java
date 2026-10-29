@@ -26,7 +26,7 @@ public class JMATest {
 
         // transformed
         ClassNode transformed = new ClassNode();
-        transformed.visit(52, 1, "xyz/wagyourtail/unimined/test/TestClass", null, "java/lang/Object", null);
+        transformed.visit(52, 1, "xyz/wagyourtail/unimined/test/DefineClassTarget", null, "java/lang/Object", null);
 
         MethodVisitor md = transformed.visitMethod(Opcodes.ACC_STATIC | Opcodes.ACC_PUBLIC, "test", "()Ljava/lang/String;", null, null);
         md.visitCode();
@@ -45,7 +45,7 @@ public class JMATest {
         MethodHandles.Lookup lookup = MethodHandles.lookup();
         lookup.defineClass(classBytes);
 
-        assertEquals("transformed", TestClass.test());
+        assertEquals("transformed", DefineClassTarget.test());
     }
 
 }
